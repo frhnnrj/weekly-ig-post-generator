@@ -101,47 +101,81 @@ def gemini_pick_model(key: str) -> str:
     return flash[-1]
 
 
+class TransientAPIError(Exception):
+    """Overload/timeouts that persisted after all retries and fallbacks."""
+
+
+def post_with_retry(url, headers, body, tries=4, timeout=60):
+    """POST with exponential backoff on timeouts, 429 and 5xx."""
+    import requests
+
+    delay, last = 5, ""
+    for i in range(1, tries + 1):
+        try:
+            r = requests.post(url, headers=headers, json=body, timeout=timeout)
+            if r.status_code not in (429, 500, 502, 503, 504):
+                return r
+            last = f"HTTP {r.status_code}"
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last = type(exc).__name__
+        print(f"  transient error ({last}), attempt {i}/{tries}")
+        if i < tries:
+            time.sleep(delay)
+            delay *= 2
+    raise TransientAPIError(last)
+
+
 def call_llm(system: str, user: str) -> str:
     global MODEL
-    import requests
 
     if PROVIDER == "gemini":
         key = os.environ["GEMINI_API_KEY"]
+        headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
             "generationConfig": {"temperature": 0.8, "responseMimeType": "application/json"},
         }
-        for tried_discovery in (False, True):
-            r = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
-                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-                json=body,
-                timeout=90,
-            )
-            if r.status_code == 404 and not tried_discovery:
-                old, MODEL = MODEL, gemini_pick_model(key)
-                print(f"Model '{old}' tidak ditemukan (404). Beralih otomatis ke '{MODEL}'.")
+        fallbacks = [m.strip() for m in os.getenv("FALLBACK_MODELS", "gemini-flash-lite-latest").split(",")]
+        candidates = [MODEL] + [m for m in fallbacks if m and m != MODEL]
+        last_err = None
+        idx = 0
+        while idx < len(candidates):
+            model = candidates[idx]
+            idx += 1
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            try:
+                r = post_with_retry(url, headers, body)
+            except TransientAPIError as exc:
+                last_err = exc
+                print(f"Model '{model}' sibuk ({exc}); mencoba model cadangan.")
                 continue
-            break
-        if r.status_code in (400, 401, 403, 404):
-            raise FatalAPIError(f"Gemini API {r.status_code}: {r.text[:300]}")
-        r.raise_for_status()
-        return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            if r.status_code == 404:
+                print(f"Model '{model}' tidak ditemukan (404).")
+                if idx == 1:  # primary model missing: discover what this key can use
+                    picked = gemini_pick_model(key)
+                    if picked not in candidates:
+                        candidates.insert(idx, picked)
+                continue
+            if r.status_code in (400, 401, 403):
+                raise FatalAPIError(f"Gemini API {r.status_code}: {r.text[:300]}")
+            r.raise_for_status()
+            MODEL = model
+            return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        raise TransientAPIError(f"semua model gagal/sibuk: {last_err}")
 
     if PROVIDER == "anthropic":
         key = os.environ["ANTHROPIC_API_KEY"]
-        r = requests.post(
+        r = post_with_retry(
             "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={
+            {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            {
                 "model": MODEL,
                 "max_tokens": 1500,
                 "temperature": 0.8,
                 "system": system,
                 "messages": [{"role": "user", "content": user}],
             },
-            timeout=90,
         )
         if r.status_code in (400, 401, 403, 404):
             raise FatalAPIError(f"Anthropic API {r.status_code}: {r.text[:300]}")
@@ -223,6 +257,9 @@ def generate_post(article: dict, system: str, user_tpl: str) -> dict:
             post = parse_json(call_llm(system, prompt))
         except FatalAPIError:
             raise
+        except TransientAPIError as exc:
+            problems = [f"API tidak tersedia setelah retry dan model cadangan: {exc}"]
+            break
         except Exception as exc:  # bad JSON / API hiccup -> retry
             problems = [f"Output bukan JSON valid atau API error: {exc}"]
             continue
@@ -275,6 +312,8 @@ def main():
         md.append(p.get("caption", "(kosong)"))
         md.append("\n---\n")
     (out / f"posts_{today}.md").write_text("\n".join(md), encoding="utf-8")
+    if not any(p.get("validated") for p in results):
+        sys.exit("Tidak ada caption yang lolos validasi; run ditandai gagal.")
 
 
 if __name__ == "__main__":
