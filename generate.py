@@ -229,7 +229,7 @@ def validate(post: dict, article: dict) -> list:
 
     source_text = f"{article['title']} {article['summary']}"
     # ignore list markers ("1.") and the brand name when checking numbers
-    num_text = re.sub(r"^\s*\d+[.)]\s", "", body, flags=re.M)
+    num_text = re.sub(r"^[\s*_>\-]*\d+\s*[.)]", "", body, flags=re.M)
     num_text = re.sub(r"rumah123", "", num_text, flags=re.I)
     for num in set(re.findall(r"\d+", num_text)):
         if num not in ALLOWED_NUMBERS and num not in source_text:
@@ -262,8 +262,12 @@ def generate_post(article: dict, system: str, user_tpl: str) -> dict:
             break
         except Exception as exc:  # bad JSON / API hiccup -> retry
             problems = [f"Output bukan JSON valid atau API error: {exc}"]
+            print(f"  percobaan {attempt} error: {exc}")
             continue
         problems = validate(post, article)
+        if problems:
+            print(f"  percobaan {attempt} ditolak: {problems}")
+            print(f"  caption ditolak (potongan): {str(post.get('caption', ''))[:500]!r}")
         if not problems:
             post["attempts"] = attempt
             post["validated"] = True
@@ -278,6 +282,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="hanya tampilkan berita yang terpilih")
     args = ap.parse_args()
+    sys.stdout.reconfigure(line_buffering=True)
 
     articles = fetch_news()
     if not articles:
