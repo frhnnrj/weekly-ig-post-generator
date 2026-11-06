@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()
-DEFAULT_MODELS = {"gemini": "gemini-2.0-flash", "anthropic": "claude-sonnet-4-6"}
+DEFAULT_MODELS = {"gemini": "gemini-flash-latest", "anthropic": "claude-sonnet-4-6"}
 MODEL = os.getenv("MODEL") or DEFAULT_MODELS.get(PROVIDER, "")
 POSTS_PER_RUN = int(os.getenv("POSTS_PER_RUN", "3"))
 MAX_ATTEMPTS = 3
@@ -72,21 +72,60 @@ def fetch_news():
 
 
 # ---------- LLM ----------
+class FatalAPIError(Exception):
+    """Config/auth/model errors that retrying cannot fix."""
+
+
+def gemini_pick_model(key: str) -> str:
+    """Ask the API which models this key can use and pick a current Flash model."""
+    import requests
+
+    r = requests.get(
+        "https://generativelanguage.googleapis.com/v1beta/models",
+        headers={"x-goog-api-key": key},
+        params={"pageSize": 200},
+        timeout=30,
+    )
+    r.raise_for_status()
+    names = [
+        m["name"].split("/")[-1]
+        for m in r.json().get("models", [])
+        if "generateContent" in m.get("supportedGenerationMethods", [])
+    ]
+    if "gemini-flash-latest" in names:
+        return "gemini-flash-latest"
+    skip = ("lite", "preview", "exp", "image", "tts", "thinking", "live", "audio", "vision")
+    flash = sorted(n for n in names if "flash" in n and not any(x in n for x in skip))
+    if not flash:
+        raise FatalAPIError(f"Tidak ada model Flash yang tersedia untuk key ini. Model: {names[:15]}")
+    return flash[-1]
+
+
 def call_llm(system: str, user: str) -> str:
+    global MODEL
     import requests
 
     if PROVIDER == "gemini":
         key = os.environ["GEMINI_API_KEY"]
-        r = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
-            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-            json={
-                "systemInstruction": {"parts": [{"text": system}]},
-                "contents": [{"role": "user", "parts": [{"text": user}]}],
-                "generationConfig": {"temperature": 0.8, "responseMimeType": "application/json"},
-            },
-            timeout=90,
-        )
+        body = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": {"temperature": 0.8, "responseMimeType": "application/json"},
+        }
+        for tried_discovery in (False, True):
+            r = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
+                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                json=body,
+                timeout=90,
+            )
+            if r.status_code == 404 and not tried_discovery:
+                old, MODEL = MODEL, gemini_pick_model(key)
+                print(f"Model '{old}' tidak ditemukan (404). Beralih otomatis ke '{MODEL}'.")
+                continue
+            break
+        if r.status_code in (400, 401, 403, 404):
+            raise FatalAPIError(f"Gemini API {r.status_code}: {r.text[:300]}")
         r.raise_for_status()
         return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
@@ -104,10 +143,12 @@ def call_llm(system: str, user: str) -> str:
             },
             timeout=90,
         )
+        if r.status_code in (400, 401, 403, 404):
+            raise FatalAPIError(f"Anthropic API {r.status_code}: {r.text[:300]}")
         r.raise_for_status()
         return "".join(b.get("text", "") for b in r.json()["content"])
 
-    sys.exit(f"LLM_PROVIDER tidak dikenal: {PROVIDER}")
+    raise FatalAPIError(f"LLM_PROVIDER tidak dikenal: {PROVIDER}")
 
 
 def parse_json(text: str) -> dict:
@@ -180,6 +221,8 @@ def generate_post(article: dict, system: str, user_tpl: str) -> dict:
             prompt += "\nPerbaiki semuanya dan balas JSON saja."
         try:
             post = parse_json(call_llm(system, prompt))
+        except FatalAPIError:
+            raise
         except Exception as exc:  # bad JSON / API hiccup -> retry
             problems = [f"Output bukan JSON valid atau API error: {exc}"]
             continue
@@ -212,7 +255,10 @@ def main():
 
     results = []
     for a in articles:
-        post = generate_post(a, system, user_tpl)
+        try:
+            post = generate_post(a, system, user_tpl)
+        except FatalAPIError as exc:
+            sys.exit(f"ERROR FATAL (tidak ada gunanya diulang): {exc}")
         post["source_title"], post["source_url"] = a["title"], a["link"]
         results.append(post)
         print(f"[{'OK' if post['validated'] else 'GAGAL'}] {a['title'][:70]} (percobaan {post['attempts']})")
