@@ -134,7 +134,7 @@ def call_llm(system: str, user: str) -> str:
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
-            "generationConfig": {"temperature": 0.8, "responseMimeType": "application/json"},
+            "generationConfig": {"temperature": 0.6, "responseMimeType": "application/json"},
         }
         fallbacks = [m.strip() for m in os.getenv("FALLBACK_MODELS", "gemini-flash-lite-latest").split(",")]
         candidates = [MODEL] + [m for m in fallbacks if m and m != MODEL]
@@ -172,7 +172,7 @@ def call_llm(system: str, user: str) -> str:
             {
                 "model": MODEL,
                 "max_tokens": 1500,
-                "temperature": 0.8,
+                "temperature": 0.6,
                 "system": system,
                 "messages": [{"role": "user", "content": user}],
             },
@@ -213,9 +213,18 @@ def validate(post: dict, article: dict) -> list:
     n_brand = len(re.findall(r"rumah123", body, re.I))
     if n_brand != 1:
         problems.append(f"'Rumah123' muncul {n_brand}x di badan caption; harus tepat 1x.")
-    if re.search(r"\brp\.?\s?\d|\b(juta|miliar|triliun)\b", low):
-        problems.append("Menyebut nominal rupiah/harga rumah.")
-    if re.search(r"bunga[^.\n]{0,40}\d", low):
+    source_low = f"{article['title']} {article['summary']}".lower()
+    squash = lambda t: re.sub(r"[\s.,]", "", t)
+    money = re.findall(
+        r"\brp\.?\s?\d[\d.,]*(?:\s?(?:juta|miliar|triliun|ribu))?"
+        r"|\b\d[\d.,]*\s?(?:juta|miliar|triliun)\b"
+        r"|\b(?:satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|seratus|ratus)\s+(?:ratus\s+)?(?:juta|miliar|triliun)\b",
+        low,
+    )
+    bad_money = [m for m in money if squash(m) not in squash(source_low)]
+    if bad_money:
+        problems.append(f"Menyebut nominal rupiah yang tidak ada di sumber: {bad_money}. Hindari nominal, tulis secara umum.")
+    if re.search(r"bunga[^.\n]{0,15}\d+(?:[.,]\d+)?\s?%", low):
         problems.append("Menyebut besaran suku bunga.")
     for name in BANKS:
         if re.search(rf"\b{re.escape(name)}\b", low):
