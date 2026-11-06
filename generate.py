@@ -2,7 +2,7 @@
 """Weekly IG Post Generator for Rumah123.
 
 Flow: RSS property news -> pick fresh articles -> LLM writes a caption
--> rule-based validator checks brand/compliance rules -> retry with feedback
+-> rule-based validator checks brand/compliance/content rules -> retry with feedback
 -> save to output/posts_YYYY-MM-DD.{md,json}
 """
 import argparse
@@ -27,6 +27,21 @@ BANKS = ["bca", "bri", "bni", "mandiri", "btn", "cimb", "permata", "danamon", "o
 COMPETITORS = ["99.co", "99 co", "olx", "lamudi", "dotproperty", "urbanindo", "rumah.com"]
 PROMISES = ["pasti disetujui", "dijamin", "pasti acc", "tanpa syarat"]
 ALLOWED_NUMBERS = {"20", "30"}  # DP saving range and installment cap from the brief
+# time claims that must come from the source article if used
+TIME_CLAIMS = ["tahun ini", "tahun lalu", "tahun depan"]
+
+# required content coverage (regex, human-readable label used in feedback)
+REQUIRED_TIPS = [
+    (r"\b20\s?-\s?30\s?%", "tips menabung 20-30% penghasilan untuk DP"),
+    (r"\b30\s?%", "batas cicilan KPR sekitar 30% dari gaji"),
+    (r"slik|riwayat kredit|catatan kredit|riwayat pembayaran", "menjaga riwayat kredit/SLIK OJK"),
+    (r"dokumen|slip gaji|npwp|rekening koran", "menyiapkan dokumen pengajuan"),
+    (
+        r"keputusan[^.\n]{0,60}bank|bank[^.\n]{0,60}(?:menentukan|memutuskan|keputusan|persetujuan)"
+        r"|(?:persetujuan|disetujui)[^.\n]{0,60}bank",
+        "penegasan bahwa keputusan/persetujuan akhir ada di pihak bank",
+    ),
+]
 
 
 # ---------- news ----------
@@ -192,9 +207,17 @@ def parse_json(text: str) -> dict:
 
 # ---------- validation ----------
 EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
+NUMBERED_LINE = re.compile(r"^\s*[*_>\-]*\s*\d+\s*[.)]", re.M)
 
 
-def validate(post: dict, article: dict) -> list:
+def hook_opener(caption: str, n: int = 2) -> str:
+    """First n words of the caption (lowercased, punctuation stripped), used to enforce hook variety."""
+    first = caption.strip().splitlines()[0] if caption.strip() else ""
+    words = re.findall(r"\w+", first.lower())
+    return " ".join(words[:n])
+
+
+def validate(post: dict, article: dict, used_openers=()) -> list:
     """Return a list of human-readable problems. Empty list = pass."""
     cap = post.get("caption", "")
     problems = []
@@ -202,7 +225,9 @@ def validate(post: dict, article: dict) -> list:
     words = len(body.split())
     tags = re.findall(r"#\w+", cap)
     low = cap.lower()
+    body_low = body.lower()
 
+    # --- format ---
     if not 120 <= words <= 180:
         problems.append(f"Panjang {words} kata; harus 120-180 kata di luar hashtag.")
     if not 6 <= len(tags) <= 8:
@@ -213,6 +238,11 @@ def validate(post: dict, article: dict) -> list:
     n_brand = len(re.findall(r"rumah123", body, re.I))
     if n_brand != 1:
         problems.append(f"'Rumah123' muncul {n_brand}x di badan caption; harus tepat 1x.")
+    n_points = len(NUMBERED_LINE.findall(body))
+    if not 3 <= n_points <= 4:
+        problems.append(f"Ada {n_points} poin bernomor; harus 3-4 poin yang diawali '1.', '2.', dst.")
+
+    # --- compliance ---
     source_low = f"{article['title']} {article['summary']}".lower()
     squash = lambda t: re.sub(r"[\s.,]", "", t)
     money = re.findall(
@@ -236,6 +266,7 @@ def validate(post: dict, article: dict) -> list:
         if p in low:
             problems.append(f"Janji persetujuan KPR: '{p}'.")
 
+    # --- facts: numbers and unsourced time claims ---
     source_text = f"{article['title']} {article['summary']}"
     # ignore list markers ("1.") and the brand name when checking numbers
     num_text = re.sub(r"^[\s*_>\-]*\d+\s*[.)]", "", body, flags=re.M)
@@ -243,19 +274,34 @@ def validate(post: dict, article: dict) -> list:
     for num in set(re.findall(r"\d+", num_text)):
         if num not in ALLOWED_NUMBERS and num not in source_text:
             problems.append(f"Angka '{num}' tidak ada di sumber berita (potensi halusinasi).")
+    for phrase in TIME_CLAIMS:
+        if phrase in body_low and phrase not in source_low:
+            problems.append(f"Klaim waktu '{phrase}' tidak ada di sumber berita; hapus atau tulis netral.")
     if not post.get("facts_used"):
         problems.append("facts_used kosong.")
+
+    # --- content coverage: every post must carry the required tips + bank disclaimer ---
+    missing = [label for pattern, label in REQUIRED_TIPS if not re.search(pattern, body_low)]
+    if missing:
+        problems.append("Isi belum lengkap, wajib memuat: " + "; ".join(missing) + ".")
+
+    # --- hook variety across posts in one run ---
+    opener = hook_opener(cap)
+    if opener and opener in used_openers:
+        problems.append(f"Hook diawali '{opener}', sama dengan post lain di run ini; pakai pembuka yang berbeda.")
     return problems
 
 
 # ---------- pipeline ----------
-def generate_post(article: dict, system: str, user_tpl: str) -> dict:
+def generate_post(article: dict, system: str, user_tpl: str, used_openers=()) -> dict:
     user = (
         user_tpl.replace("{title}", article["title"])
         .replace("{source}", article["source"])
         .replace("{published}", article["published"])
         .replace("{summary}", article["summary"] or "(tidak ada ringkasan, gunakan judul saja)")
     )
+    if used_openers:
+        user += "\n\nPembuka hook yang SUDAH dipakai post lain (jangan diulang): " + "; ".join(f"'{o}'" for o in used_openers)
     problems, post = [], {}
     for attempt in range(1, MAX_ATTEMPTS + 1):
         prompt = user
@@ -273,7 +319,7 @@ def generate_post(article: dict, system: str, user_tpl: str) -> dict:
             problems = [f"Output bukan JSON valid atau API error: {exc}"]
             print(f"  percobaan {attempt} error: {exc}")
             continue
-        problems = validate(post, article)
+        problems = validate(post, article, used_openers)
         if problems:
             print(f"  percobaan {attempt} ditolak: {problems}")
             print(f"  caption ditolak (potongan): {str(post.get('caption', ''))[:500]!r}")
@@ -304,14 +350,16 @@ def main():
     system = (ROOT / "prompts" / "system_prompt.md").read_text(encoding="utf-8")
     user_tpl = (ROOT / "prompts" / "user_prompt.md").read_text(encoding="utf-8")
 
-    results = []
+    results, used_openers = [], []
     for a in articles:
         try:
-            post = generate_post(a, system, user_tpl)
+            post = generate_post(a, system, user_tpl, tuple(used_openers))
         except FatalAPIError as exc:
             sys.exit(f"ERROR FATAL (tidak ada gunanya diulang): {exc}")
         post["source_title"], post["source_url"] = a["title"], a["link"]
         results.append(post)
+        if post.get("caption"):
+            used_openers.append(hook_opener(post["caption"]))
         print(f"[{'OK' if post['validated'] else 'GAGAL'}] {a['title'][:70]} (percobaan {post['attempts']})")
 
     today = dt.date.today().isoformat()
@@ -320,10 +368,12 @@ def main():
     (out / f"posts_{today}.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     md = [f"# Draf postingan IG Rumah123, {today}\n"]
     for i, p in enumerate(results, 1):
-        md.append(f"## Post {i}: {p['source_title']}")
-        md.append(f"Sumber: {p['source_url']}")
+        md.append(f"## Post {i}: {p['source_title']}\n")
+        md.append(f"Sumber: {p['source_url']}\n")
         md.append(f"Validasi: {'lulus' if p['validated'] else 'GAGAL: ' + '; '.join(p.get('problems', []))} (percobaan ke-{p['attempts']})\n")
+        md.append("```text")  # code fence keeps numbering and line breaks intact when copied from the preview
         md.append(p.get("caption", "(kosong)"))
+        md.append("```")
         md.append("\n---\n")
     (out / f"posts_{today}.md").write_text("\n".join(md), encoding="utf-8")
     if not any(p.get("validated") for p in results):
