@@ -1,0 +1,29 @@
+[
+  {
+    "attempts": 3,
+    "validated": false,
+    "problems": [
+      "Output bukan JSON valid atau API error: 404 Client Error: Not Found for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    ],
+    "source_title": "Pemerintah Optimalkan KUR Rp29 Triliun untuk Percepatan Perumahan - Demokratis.co.id",
+    "source_url": "https://news.google.com/rss/articles/CBMibEFVX3lxTFB6U2dNd3RWeEFpSEpaZzl3UFFfZFJlRmk0RXZpbWp1TXRyQVQ4dVhLYWtPMXplQ01VaHZPVkk4TWlWWEhOUUN2d25uNUVoelFQZjJZc1Zqd08xM01iRHFFTG1Wd3U2UEpQYmxPNw?oc=5"
+  },
+  {
+    "attempts": 3,
+    "validated": false,
+    "problems": [
+      "Output bukan JSON valid atau API error: 404 Client Error: Not Found for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    ],
+    "source_title": "Gaji Rp3 Juta Bisa Punya Rumah? Ini Simulasi KPR dan Cicilan per Bulan - jabarekspres.com",
+    "source_url": "https://news.google.com/rss/articles/CBMitgFBVV95cUxPVG9ULXJrb05NWGgxU1ZXdUdTZU1scHY5OXE1MGVRbGpPLURqcUdZU0F4TjY1d1VVWTZIRVJiZmlydFp0ZHFaSkY3QUFNRWtsSjN5d0NSNjNGS0p0NEdQa2xVZEtiX1owdUFZWTlKaExvNHNQZEFfbVpFTndmM2lXekhlNXFiUll6MkYyUlNhOF9ZaDlaZ3JERmU4ZG9aajkxakRSd0h3R2c0WHRfY2xONzdjeHJJdw?oc=5"
+  },
+  {
+    "attempts": 3,
+    "validated": false,
+    "problems": [
+      "Output bukan JSON valid atau API error: 404 Client Error: Not Found for url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    ],
+    "source_title": "Warga RI Antre Beli Rumah Subsidi \"Mengular\", Kenapa Penjualan Seret? - CNBC Indonesia",
+    "source_url": "https://news.google.com/rss/articles/CBMiwgFBVV95cUxNb2Zlbmt3dkVYdUdwNkZmU2N6S2Mtcmdfblg2MGIxeFowOE5NR2hTdWdFS0JDUGJFVk96RU9MMm55ZmhkN3d0MU5KUXhlbnBLN0pvNUhGNl9VaV8tb1ZUUVRJdFdYbWxmb19hMXNxMk9VYVRGcDNxaHZVM21lbjQ1U1Noei1FX1A5MVdiMjlrME1aQmFpODBQSko0dE5LUlczbmxhM1N6eU5VNmh1c0ZUd3lnZFRjcFNQTUVNcWtzQ3ROd9IBxwFBVV95cUxNRElZd1AyTzVuMGExZ0RoczZFTDhZZXpsa0NKZExFYnlZN1dXQ2NucFJBdU5FenJYeEtrSmpFSGw5aGJpSEduRUVJcERBa0hMWF83R0xKbVExbDBUYmdmZDdtcVpJWFdQZHZWcXRBejFUNmdDcnY2UGNRR2oyUU1SWC1CcEtMM3k5Q05jVjBRLWRQSjR6b1E2S1ppaHBEV1haaUU1d0xEQ0djckk0WDNqa2piWHVxZlZkTmp3ZjJRdXNBSDBtLThj?oc=5"
+  }
+]
