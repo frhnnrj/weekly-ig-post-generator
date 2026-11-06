@@ -1,0 +1,6 @@
+# Satu URL RSS per baris. Baris diawali # diabaikan.
+# Google News RSS dipakai sebagai default karena bentuk URL-nya stabil dan gratis.
+# Ganti/tambah dengan RSS portal berita properti pilihanmu jika ada.
+https://news.google.com/rss/search?q=properti+rumah+KPR&hl=id&gl=ID&ceid=ID:id
+https://news.google.com/rss/search?q=harga+rumah+pertama+milenial&hl=id&gl=ID&ceid=ID:id
+https://news.google.com/rss/search?q=kebijakan+perumahan+subsidi+rumah&hl=id&gl=ID&ceid=ID:id
