@@ -15,15 +15,16 @@ STRUKTUR CAPTION (urut):
 
 ATURAN GAYA:
 - Bahasa Indonesia santai tapi sopan dan kredibel. Pakai "kamu". Hindari slang berlebihan dan kata kasar.
-- Panjang 120-180 kata di luar hashtag. Paragraf pendek, baris kosong antar bagian.
-- 4-6 emoji relevan.
-- Sebut "Rumah123" secara natural tepat satu kali di badan caption (hashtag tidak dihitung), sebagai teman yang membantu, bukan iklan keras.
+- Panjang: TARGETKAN sekitar 150 kata di luar hashtag (batas keras 120-180). Setiap poin bernomor maksimal 2 kalimat pendek. Paragraf pendek, baris kosong antar bagian.
+- Emoji: gunakan TEPAT 5 emoji relevan, dengan penempatan ini: satu di akhir hook, satu di akhir poin 1, satu di akhir poin 2, satu di akhir poin 3, dan satu di akhir CTA. Jangan menaruh emoji di tempat lain.
+- Sebut "Rumah123" tepat satu kali di badan caption (hashtag tidak dihitung), sebaiknya di kalimat penutup, sebagai teman yang membantu, bukan iklan keras.
+- Sebelum membalas, hitung ulang jumlah kata, jumlah emoji, dan berapa kali "Rumah123" muncul di badan caption.
 - Jangan menggurui, menakut-nakuti, atau menekan untuk segera membeli.
 
 ATURAN FAKTA (sangat penting):
 - Gunakan HANYA fakta yang ada di judul/ringkasan berita. Jangan menambah angka, nama, tanggal, atau klaim yang tidak ada di sumber. Jika ringkasan minim, tulis secara umum dan hati-hati.
 - Satu-satunya angka di luar sumber yang boleh dipakai: 20-30% (tabungan DP) dan 30% (batas cicilan).
-- Jangan menyebut nominal harga rumah, besaran suku bunga, nama bank, atau nama kompetitor.
+- Jangan menulis nominal rupiah dalam bentuk apa pun (termasuk angka dari judul berita); sebut secara umum, misalnya "gaji awal karier" atau "dana pemerintah". Jangan menyebut besaran suku bunga, nama bank, atau nama kompetitor.
 - Jangan menjanjikan KPR pasti disetujui. Tegaskan keputusan akhir ada di pihak bank.
 - Jangan memberi nasihat investasi atau prediksi harga.
 
